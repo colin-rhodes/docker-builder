@@ -1,15 +1,37 @@
 #
 # Builder Dockerfile
-# An image for a multi-purpose builder
+# An image for building uwsgi packages for production
 #
 
-FROM colinrhodes/pypy:stripped
+FROM colinrhodes/pypy
 
 MAINTAINER Colin Rhodes <colin@colin-rhodes.com>
 
-RUN apt-get -yq update
-RUN apt-get -yq --no-install-recommends install build-essential doxygen libxml2-dev libxslt-dev graphviz automake autoconf pkg-config gcc g++ make libboost-dev libedit-dev libssl-dev libtool libfcgi libfcgi-dev xfslibs-dev libfuse-dev linux-kernel-headers libcrypto++-dev libaio-dev libgoogle-perftools-dev libkeyutils-dev uuid-dev libblkid-dev libudev-dev libatomic-ops-dev libboost-program-options-dev libboost-system-dev libboost-thread-dev libexpat1-dev libleveldb-dev libsnappy-dev libcurl4-gnutls-dev libgoogle-glog-dev libpopt-dev libsparsehash-dev pkg-config libjson0-dev git unzip wget subversion default-jdk javahelper junit4 libnss3-dev uuid-runtime yasm debhelper equivs
-RUN pip install nose argparse sphinx greenlet ipython
 ADD libpypy-c.so /usr/lib/libpypy-c.so
+
+RUN apt-get -yq update
+RUN apt-get -yq --no-install-recommends install build-essential libssl-dev pypy-dev libjansson-dev libjansson4 python-dev libpcre3-dev librados-dev
+
+ADD uwsgi-2.0.4.tar.gz /src/
+ADD redis-2.8.9.tar.gz /src/
+
+ENV PREFIX /opt/redis 
+
+RUN cd /src/redis-2.8.9 && make && make install
+
+WORKDIR /src/uwsgi-2.0.4
+
+RUN mkdir -p /opt/uwsgi/ && \
+    make && python uwsgiconfig.py --build core && \
+    python uwsgiconfig.py --plugin plugins/python core && \
+    python uwsgiconfig.py --plugin plugins/pypy core && \
+    python uwsgiconfig.py --plugin plugins/rados core && \
+    mv uwsgi *.so /opt/uwsgi/
+
+WORKDIR /opt
+
+RUN tar -cf redis-2.8.9-bin.tar redis && \
+    tar -cf uwsgi-2.0.4-core-bin.tar uwsgi && \
+    gzip redis-2.8.9-bin.tar && gzip uwsgi-2.0.4-core-bin.tar
 
 CMD ["/bin/bash"]
